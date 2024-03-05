@@ -1071,6 +1071,8 @@ do {                                                                    \
 #endif
 #define GGML_F32x8_ADD     _mm256_add_ps
 #define GGML_F32x8_MUL     _mm256_mul_ps
+#define GGML_F32x8_SUB     _mm256_sub_ps
+#define GGML_F32x8_DIV     _mm256_div_ps
 #define GGML_F32x8_REDUCE(res, x)                                 \
 do {                                                              \
     int offset = GGML_F32_ARR >> 1;                               \
@@ -1100,6 +1102,8 @@ do {                                                              \
 #define GGML_F32_VEC_FMA    GGML_F32x8_FMA
 #define GGML_F32_VEC_ADD    GGML_F32x8_ADD
 #define GGML_F32_VEC_MUL    GGML_F32x8_MUL
+#define GGML_F32_VEC_SUB    GGML_F32x8_SUB
+#define GGML_F32_VEC_DIV    GGML_F32x8_DIV
 #define GGML_F32_VEC_REDUCE GGML_F32x8_REDUCE
 
 // F16 AVX

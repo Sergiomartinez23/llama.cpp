@@ -906,6 +906,149 @@ inline static float vaddvq_f32(float32x4_t v) {
     #define GGML_F16_VEC_MUL            GGML_F32Cx4_MUL
     #define GGML_F16_VEC_REDUCE         GGML_F32Cx4_REDUCE
 #endif
+#elif defined(__AVX512F__)                       
+#define GGML_SIMD
+
+// F32 AVX512
+
+#define GGML_F32_STEP 64 // Try other values / This gives the array´s size
+#define GGML_F32_EPR  16 
+
+#define GGML_F32x16         __m512
+#define GGML_F32x16_ZERO    _mm512_setzero_ps()
+#define GGML_F32x16_SET1(x) _mm512_set1_ps(x)
+#define GGML_F32x16_LOAD    _mm512_loadu_ps
+#define GGML_F32x16_STORE   _mm512_storeu_ps
+//Is this compulsory(avx512 has fma included)?
+#if defined(__FMA__)
+    #define GGML_F32x16_FMA(a, b, c) _mm512_fmadd_ps(b, c, a)
+#else
+    #define GGML_F32x16_FMA(a, b, c) _mm512_add_ps(_mm512_mul_ps(b, c), a)
+#endif
+#define GGML_F32x16_ADD     _mm512_add_ps
+#define GGML_F32x16_MUL     _mm512_mul_ps 
+#define GGML_F32x16_SUB     _mm512_sub_ps
+#define GGML_F32x16_DIV     _mm512_div_ps
+//Here in reduce we first have to combine all of the array elements and then reduce them
+#define GGML_F32x16_REDUCE(res, x)                                      \
+do {                                                                    \
+    for (int i = 1; i < GGML_F32_ARR; i++) {                            \
+        x[0] = _mm512_add_ps(x[0], x[i]);                               \
+    }                                                                   \
+    res = _mm512_reduce_add_ps(x[0]);                                   \
+} while (0)                                                                  
+/**                            \
+do {                                                              \
+    int offset = GGML_F32_ARR >> 1;                               \
+    for (int i = 0; i < offset; ++i) {                            \
+        x[i] = _mm512_add_ps(x[i], x[offset+i]);                  \
+    }                                                             \
+    offset >>= 1;                                                 \
+    for (int i = 0; i < offset; ++i) {                            \
+        x[i] = _mm512_add_ps(x[i], x[offset+i]);                  \
+    }                                                             \
+    offset >>= 1;                                                 \
+    for (int i = 0; i < offset; ++i) {                            \
+        x[i] = _mm512_add_ps(x[i], x[offset+i]);                  \
+    }                                                             \
+    const __m128 t0 = _mm_add_ps(_mm256_castps256_ps128(x[0]),    \
+                                 _mm256_extractf128_ps(x[0], 1)); \
+    const __m128 t1 = _mm_hadd_ps(t0, t0);                        \
+    res = _mm_cvtss_f32(_mm_hadd_ps(t1, t1));                     \
+} while (0)
+// TODO: is this optimal ?
+*/
+
+#define GGML_F32_VEC        GGML_F32x16
+#define GGML_F32_VEC_ZERO   GGML_F32x16_ZERO
+#define GGML_F32_VEC_SET1   GGML_F32x16_SET1
+#define GGML_F32_VEC_LOAD   GGML_F32x16_LOAD
+#define GGML_F32_VEC_STORE  GGML_F32x16_STORE
+#define GGML_F32_VEC_FMA    GGML_F32x16_FMA
+#define GGML_F32_VEC_ADD    GGML_F32x16_ADD
+#define GGML_F32_VEC_MUL    GGML_F32x16_MUL
+#define GGML_F32_VEC_SUB    GGML_F32x16_SUB
+#define GGML_F32_VEC_DIV    GGML_F32x16_DIV
+#define GGML_F32_VEC_REDUCE GGML_F32x16_REDUCE
+
+// F16 AVX512
+
+//AVX512 does have f16 support with avx-512_FP16 extension, so we need to check this
+#ifdef __AVX512FP16__
+#define GGML_F16_STEP 64 // Try other values / This gives the array´s size
+#define GGML_F16_EPR  32
+
+#define GGML_F16x32             __m512h
+#define GGML_F16x32_ZERO        _mm512_setzero_ps()
+#define GGML_F16x32_SET1(x)     _mm512_set1_ps(x)
+
+#define GGML_F16x32_LOAD(x)     _mm512_loadu_ph(x)
+#define GGML_F16x32_STORE(x, y) _mm512_storeu_ph(x, y)
+
+#define GGML_F16x32_FMA(a, b, c) _mm512_fmadd_ps(b, c, a)         
+#define GGML_F16x32_ADD         _mm512_add_ph
+#define GGML_F16x32_MUL         _mm512_mul_ph
+#define GGML_F16x32_REDUCE(res, x)                                      \
+do {                                                                    \
+    for (int i = 1; i < GGML_F32_ARR; i++) {                            \
+        x[0] = _mm512_add_phs(x[0], x[i]);                               \
+    }                                                                   \
+    res = _mm512_reduce_add_ph(x[0]);                                      \
+} while (0)                             
+
+#define GGML_F16_VEC                GGML_F16x32
+#define GGML_F16_VEC_ZERO           GGML_F16x32_ZERO
+#define GGML_F16_VEC_SET1           GGML_F16x32_SET1
+#define GGML_F16_VEC_LOAD(p, i)     GGML_F16x32_LOAD(p)
+#define GGML_F16_VEC_STORE(p, r, i) GGML_F16x32_STORE(p, r[i])
+#define GGML_F16_VEC_FMA            GGML_F16x32_FMA
+#define GGML_F16_VEC_ADD            GGML_F16x32_ADD
+#define GGML_F16_VEC_MUL            GGML_F16x32_MUL
+#define GGML_F16_VEC_REDUCE         GGML_F16x32_REDUCE
+
+#else
+//if we dont have f16 support we need to use f32
+#define GGML_F16_STEP 64 //Check this value
+#define GGML_F16_EPR  16
+
+#define GGML_F32Cx16             __m512
+#define GGML_F32Cx16_ZERO        _mm512_setzero_ps()
+#define GGML_F32Cx16_SET1(x)     _mm512_set1_ps(x)
+
+
+//we dont need to check if there is f16 cause 512 does have it
+//avx512 has backward compatibility with avx2/avx
+#define GGML_F32Cx16_LOAD(x)     _mm512_cvtph_ps(_mm256_loadu_si256((__m256i *)(x)))
+#define GGML_F32Cx16_STORE(x, y) _mm256_storeu_si256((__m256i *)(x), _mm512_cvtps_ph(y, 0))
+
+
+#define GGML_F32Cx16_FMA         GGML_F32x16_FMA
+#define GGML_F32Cx16_ADD         _mm512_add_ps
+#define GGML_F32Cx16_MUL         _mm512_mul_ps
+#define GGML_F32Cx16_REDUCE      GGML_F32x16_REDUCE
+
+
+#define GGML_F16_VEC                GGML_F32Cx16
+#define GGML_F16_VEC_ZERO           GGML_F32Cx16_ZERO
+#define GGML_F16_VEC_SET1           GGML_F32Cx16_SET1
+#define GGML_F16_VEC_LOAD(p, i)     GGML_F32Cx16_LOAD(p)
+#define GGML_F16_VEC_STORE(p, r, i) GGML_F32Cx16_STORE(p, r[i])
+#define GGML_F16_VEC_FMA            GGML_F32Cx16_FMA
+#define GGML_F16_VEC_ADD            GGML_F32Cx16_ADD
+#define GGML_F16_VEC_MUL            GGML_F32Cx16_MUL
+#define GGML_F16_VEC_REDUCE         GGML_F32Cx16_REDUCE
+#endif
+
+//Here we include intrinsics only available in avx512f
+#define GGML_16_MASK               __mmask16
+
+#define GGML_F32x16_VEC_SQRT       _mm512_sqrt_ps
+#define GGML_F32x16_VEC_ABS        _mm512_abs_ps
+
+//Masking operations
+#define GGML_F32x16_VEC_CMPGT(a, b)        _mm512_cmp_ps_mask(a,b, 30)//30 is _CMP_GT_OQ
+#define GGML_F32x16_VEC_CMPLT(a, b)        _mm512_cmp_ps_mask(a,b, 17)//17 is _CMP_LT_OQ
+#define GGML_F32x16_STORE_MASK             _mm512_mask_storeu_ps
 
 #elif defined(__AVX__)
 
@@ -1308,16 +1451,229 @@ inline static void ggml_vec_set_i32(const int n, int32_t * x, const int32_t v) {
 
 inline static void ggml_vec_set_f16(const int n, ggml_fp16_t * x, const int32_t v) { for (int i = 0; i < n; ++i) x[i] = v; }
 
-inline static void ggml_vec_add_f32 (const int n, float * z, const float * x, const float * y) { for (int i = 0; i < n; ++i) z[i]  = x[i] + y[i]; }
-inline static void ggml_vec_add1_f32(const int n, float * z, const float * x, const float   v) { for (int i = 0; i < n; ++i) z[i]  = x[i] + v;    }
-inline static void ggml_vec_acc_f32 (const int n, float * y, const float * x)                  { for (int i = 0; i < n; ++i) y[i] += x[i];        }
-inline static void ggml_vec_acc1_f32(const int n, float * y, const float   v)                  { for (int i = 0; i < n; ++i) y[i] += v;           }
-inline static void ggml_vec_sub_f32 (const int n, float * z, const float * x, const float * y) { for (int i = 0; i < n; ++i) z[i]  = x[i] - y[i]; }
-inline static void ggml_vec_set_f32 (const int n, float * x, const float   v)                  { for (int i = 0; i < n; ++i) x[i]  = v;           }
-inline static void ggml_vec_cpy_f32 (const int n, float * y, const float * x)                  { for (int i = 0; i < n; ++i) y[i]  = x[i];        }
-inline static void ggml_vec_neg_f32 (const int n, float * y, const float * x)                  { for (int i = 0; i < n; ++i) y[i]  = -x[i];       }
-inline static void ggml_vec_mul_f32 (const int n, float * z, const float * x, const float * y) { for (int i = 0; i < n; ++i) z[i]  = x[i]*y[i];   }
-inline static void ggml_vec_div_f32 (const int n, float * z, const float * x, const float * y) { for (int i = 0; i < n; ++i) z[i]  = x[i]/y[i];   }
+inline static void ggml_vec_add_f32 (const int n, float * z, const float * x, const float * y) { 
+#ifdef GGML_SIMD
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC ay[GGML_F32_ARR];
+    GGML_F32_VEC sum[GGML_F32_ARR];
+    
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR );
+            ay[j] = GGML_F32_VEC_LOAD(y + i + j * GGML_F32_EPR);
+            sum[j] = GGML_F32_VEC_ADD(ax[j], ay[j]);
+            GGML_F32_VEC_STORE(z + i + j * GGML_F32_EPR, sum[j]);
+        }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        z[i]  = x[i] + y[i];
+    }
+#else
+    for (int i = 0; i < n; ++i) z[i]  = x[i] + y[i]; 
+#endif
+}
+
+inline static void ggml_vec_add1_f32(const int n, float * z, const float * x, const float   v) { 
+#ifdef GGML_SIMD
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    //Does vx need to be an array?
+    GGML_F32_VEC vx = GGML_F32_VEC_SET1(v);
+    GGML_F32_VEC az[GGML_F32_ARR];
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            az[j] = GGML_F32_VEC_ADD(ax[j], vx);
+            GGML_F32_VEC_STORE(z + i + j * GGML_F32_EPR, az[j]);
+        }
+    }
+    
+    //leftovers
+    for (int i = np; i < n; i++) {
+        z[i]  = x[i] + v;
+    }
+#else
+    for (int i = 0; i < n; ++i) z[i]  = x[i] + v;    
+#endif
+}
+
+inline static void ggml_vec_acc_f32 (const int n, float * y, const float * x)                  {
+#ifdef GGML_SIMD
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC ay[GGML_F32_ARR];
+    
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            ay[j] = GGML_F32_VEC_LOAD(y + i + j * GGML_F32_EPR);
+            ay[j] = GGML_F32_VEC_ADD(ax[j], ay[j]);
+            GGML_F32_VEC_STORE(y + i + j * GGML_F32_EPR, ay[j]);
+        }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        y[i] += x[i]; 
+    }
+#else 
+    for (int i = 0; i < n; ++i) y[i] += x[i];     
+#endif   
+}
+
+inline static void ggml_vec_acc1_f32(const int n, float * y, const float   v)                  { 
+#ifdef GGML_SIMD
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ay[GGML_F32_ARR];
+    GGML_F32_VEC vx = GGML_F32_VEC_SET1(v);
+    
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ay[j] = GGML_F32_VEC_LOAD(y + i +j * GGML_F32_EPR);
+            ay[j] = GGML_F32_VEC_ADD(vx, ay[j]);
+            GGML_F32_VEC_STORE(y + i + j * GGML_F32_EPR, ay[j]);
+        }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        y[i] += v; 
+    }
+#else
+    for (int i = 0; i < n; ++i) y[i] += v;   
+#endif        
+}
+
+inline static void ggml_vec_sub_f32 (const int n, float * z, const float * x, const float * y) { 
+#if defined(__AVX512F__) || defined(__AVX__)
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC ay[GGML_F32_ARR];
+    GGML_F32_VEC az[GGML_F32_ARR];
+
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            ay[j] = GGML_F32_VEC_LOAD(y + i + j * GGML_F32_EPR);
+            az[j] = GGML_F32_VEC_SUB(ax[j], ay[j]);
+            GGML_F32_VEC_STORE(z + i + + j * GGML_F32_EPR, az[j]);
+        }
+    }
+
+    //leftovers
+    for (int i = np; i < n; i++) {
+        z[i]  = x[i] - y[i]; 
+    }
+#else
+    for (int i = 0; i < n; ++i) z[i]  = x[i] - y[i]; 
+#endif
+}
+
+inline static void ggml_vec_set_f32 (const int n, float * x, const float   v)                  { 
+#ifdef GGML_SIMD 
+    const int np = n - (n % GGML_F32_EPR);
+    GGML_F32_VEC vx = GGML_F32_VEC_SET1(v);
+    
+    for (int i = 0; i < np; i += GGML_F32_EPR) {
+        GGML_F32_VEC_STORE(x + i , vx);
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        x[i]  = v; 
+    }
+#else
+    for (int i = 0; i < n; ++i) x[i]  = v;           
+#endif
+}
+
+inline static void ggml_vec_cpy_f32 (const int n, float * y, const float * x)                  { 
+#ifdef GGML_SIMD
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            GGML_F32_VEC_STORE(y + i + j * GGML_F32_EPR, ax[j]);
+        }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        y[i]  = x[i]; 
+    }
+#else
+    for (int i = 0; i < n; ++i) y[i]  = x[i];
+#endif
+}
+
+inline static void ggml_vec_neg_f32 (const int n, float * y, const float * x)                  { 
+#if defined(__AVX512F__) || defined(__AVX__)
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            ax[j] = GGML_F32_VEC_SUB(GGML_F32_VEC_ZERO, ax[j]);
+            GGML_F32_VEC_STORE(y + i + j * GGML_F32_EPR, ax[j]);
+        }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        y[i]  = -x[i]; 
+    }
+
+#else
+    for (int i = 0; i < n; ++i) y[i]  = -x[i];       
+#endif
+}
+
+inline static void ggml_vec_mul_f32 (const int n, float * z, const float * x, const float * y) { 
+#ifdef GGML_SIMD
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC ay[GGML_F32_ARR];
+    GGML_F32_VEC az[GGML_F32_ARR];
+    
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+       for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            ay[j] = GGML_F32_VEC_LOAD(y + i + j * GGML_F32_EPR);
+            az[j] = GGML_F32_VEC_MUL(ax[j], ay[j]);
+            GGML_F32_VEC_STORE(z + i + j * GGML_F32_EPR, az[j]);
+       }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        z[i]  = x[i]*y[i]; 
+    }
+#else
+    for (int i = 0; i < n; ++i) z[i]  = x[i]*y[i];   
+#endif    
+}
+inline static void ggml_vec_div_f32 (const int n, float * z, const float * x, const float * y) { 
+#if defined(__AVX512F__) || defined(__AVX__)
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC ay[GGML_F32_ARR];
+    GGML_F32_VEC az[GGML_F32_ARR];
+    
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j ++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            ay[j] = GGML_F32_VEC_LOAD(y + i + j * GGML_F32_EPR);
+            az[j] = GGML_F32_VEC_DIV(ax[j], ay[j]);
+            GGML_F32_VEC_STORE(z + i + j * GGML_F32_EPR, az[j]);
+        }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        z[i]  = x[i]/y[i]; 
+    }
+#else
+    for (int i = 0; i < n; ++i) z[i]  = x[i]/y[i];   
+#endif    
+}
 
 static void ggml_vec_dot_f32(int n, float * restrict s, size_t bs, const float * restrict x, size_t bx, const float * restrict y, size_t by, int nrc) {
    assert(nrc == 1);
@@ -1575,15 +1931,151 @@ inline static void ggml_vec_scale_f32(const int n, float * y, const float   v) {
 }
 
 inline static void ggml_vec_norm_f32 (const int n, float * s, const float * x) { ggml_vec_dot_f32(n, s, 0, x, 0, x, 0, 1); *s = sqrtf(*s);   }
-inline static void ggml_vec_sqr_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = x[i]*x[i];   }
-inline static void ggml_vec_sqrt_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = sqrtf(x[i]); }
+inline static void ggml_vec_sqr_f32  (const int n, float * y, const float * x) { 
+#ifdef GGML_SIMD
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC ay[GGML_F32_ARR];
+
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            ay[j] = GGML_F32_VEC_MUL(ax[j], ax[j]);
+            GGML_F32_VEC_STORE(y + i + j * GGML_F32_EPR, ay[j]);
+        }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        y[i]  = x[i]*x[i]; 
+    }
+#else
+    for (int i = 0; i < n; ++i) y[i] = x[i]*x[i];   
+#endif
+}
+inline static void ggml_vec_sqrt_f32 (const int n, float * y, const float * x) {
+#ifdef __AVX512F__
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC ay[GGML_F32_ARR];
+
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+        for (int j = 0; j < GGML_F32_ARR; j++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            ay[j] = GGML_F32x16_VEC_SQRT(ax[j]);
+            GGML_F32_VEC_STORE(y + i + j * GGML_F32_EPR, ay[j]);
+        }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        y[i]  = sqrtf(x[i]); 
+    }
+#else
+     for (int i = 0; i < n; ++i) y[i] = sqrtf(x[i]); 
+#endif
+}
+
 inline static void ggml_vec_log_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = logf(x[i]);   }
-inline static void ggml_vec_abs_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = fabsf(x[i]); }
-inline static void ggml_vec_sgn_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? 1.f : ((x[i] < 0.f) ? -1.f : 0.f); }
-inline static void ggml_vec_step_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? 1.f : 0.f; }
+
+inline static void ggml_vec_abs_f32  (const int n, float * y, const float * x) {
+#ifdef __AVX512F__
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC ay[GGML_F32_ARR];
+
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+       for (int j = 0; j < GGML_F32_ARR; j++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            ay[j] = GGML_F32x16_VEC_ABS(ax[j]);
+            GGML_F32_VEC_STORE(y + i + j * GGML_F32_EPR, ay[j]);
+       }
+    }
+    //leftovers
+    for (int i = np; i < n; i++) {
+        y[i] = fabsf(x[i]);
+    }
+#else
+     for (int i = 0; i < n; ++i) y[i] = fabsf(x[i]); 
+#endif
+}
+//TODO: Is this optimal?
+inline static void ggml_vec_sgn_f32  (const int n, float * y, const float * x) { 
+#ifdef __AVX512F__
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_16_MASK mask_true[GGML_F32_ARR];
+    GGML_16_MASK mask_false[GGML_F32_ARR];
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC zero = GGML_F32_VEC_ZERO;
+    GGML_F32_VEC positive = GGML_F32x16_SET1(1.0);
+    GGML_F32_VEC negative = GGML_F32x16_SET1(-1.0);
+
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+       for (int j = 0; j < GGML_F32_ARR; j++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            mask_true[j] = GGML_F32x16_VEC_CMPGT(ax[j], GGML_F32_VEC_ZERO);
+            mask_false[j] = GGML_F32x16_VEC_CMPLT(ax[j], GGML_F32_VEC_ZERO);
+            GGML_F32x16_STORE(y + i + j * GGML_F32_EPR, zero);
+            GGML_F32x16_STORE_MASK(y + i + j * GGML_F32_EPR, mask_true[j], positive);
+            GGML_F32x16_STORE_MASK(y + i + j * GGML_F32_EPR, mask_false[j], negative);
+       }
+    }
+
+    for (int i = np; i < n; i++) {
+        y[i] = (x[i] > 0.f) ? 1.f : ((x[i] < 0.f) ? -1.f : 0.f);
+    }
+#else
+    for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? 1.f : ((x[i] < 0.f) ? -1.f : 0.f); 
+#endif
+}
+
+inline static void ggml_vec_step_f32 (const int n, float * y, const float * x) { 
+#ifdef __AVX512F__
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_16_MASK mask[GGML_F32_ARR];
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC zero = GGML_F32_VEC_ZERO;
+    GGML_F32_VEC ones = GGML_F32x16_SET1(1.0);
+
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+       for (int j = 0; j < GGML_F32_ARR; j++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            mask[j] = GGML_F32x16_VEC_CMPGT(ax[j], GGML_F32_VEC_ZERO);
+            GGML_F32x16_STORE(y + i + j * GGML_F32_EPR, zero);
+            GGML_F32x16_STORE_MASK(y + i + j * GGML_F32_EPR, mask[j], ones);
+       }
+    }
+    for (int i = np; i < n; i++) {
+        y[i] = (x[i] > 0.f) ? 1.f : 0.f;
+    }
+#else
+    for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? 1.f : 0.f; 
+#endif    
+}
+//Can we do this with SIMD?
 inline static void ggml_vec_tanh_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = tanhf(x[i]);  }
 inline static void ggml_vec_elu_f32  (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? x[i] : expf(x[i])-1; }
-inline static void ggml_vec_relu_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? x[i] : 0.f; }
+inline static void ggml_vec_relu_f32 (const int n, float * y, const float * x) { 
+#ifdef __AVX512F__
+    const int np = (n & ~(GGML_F32_STEP - 1));
+    GGML_16_MASK mask[GGML_F32_ARR];
+    GGML_F32_VEC ax[GGML_F32_ARR];
+    GGML_F32_VEC zero = GGML_F32_VEC_ZERO;
+
+    for (int i = 0; i < np; i += GGML_F32_STEP) {
+       for (int j = 0; j < GGML_F32_ARR; j++) {
+            ax[j] = GGML_F32_VEC_LOAD(x + i + j * GGML_F32_EPR);
+            mask[j] = GGML_F32x16_VEC_CMPGT(ax[j], GGML_F32_VEC_ZERO);
+            GGML_F32x16_STORE(y + i + j * GGML_F32_EPR, zero);
+            GGML_F32x16_STORE_MASK(y + i + j * GGML_F32_EPR, mask[j], ax[j]);
+       }
+    } 
+    //leftovers
+    for (int i = np; i < n; i++) {
+        y[i] = (x[i] > 0.f) ? x[i] : 0.f;
+    }
+#else
+    for (int i = 0; i < n; ++i) y[i] = (x[i] > 0.f) ? x[i] : 0.f; 
+#endif    
+}
 inline static void ggml_vec_leaky_relu_f32 (const int n, float * y, const float * x, const float ns) { for (int i = 0; i < n; ++i) y[i] = ((x[i] > 0.f) ? x[i] : 0.f) + ns * ((x[i] < 0.0f) ? x[i] : 0.f); }
 // TODO: optimize performance
 inline static void ggml_vec_hardswish_f32 (const int n, float * y, const float * x) { for (int i = 0; i < n; ++i) y[i] = x[i] * fminf(1.0f, fmaxf(0.0f, (x[i] + 3.0f) / 6.0f)); }

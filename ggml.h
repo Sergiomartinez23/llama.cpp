@@ -172,7 +172,7 @@
 // TODO
 //
 //
-
+#define _POSIX_C_SOURCE 199309L
 #ifdef GGML_SHARED
 #    if defined(_WIN32) && !defined(__MINGW32__)
 #        ifdef GGML_BUILD

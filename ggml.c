@@ -979,19 +979,19 @@ do {                                                              \
 #define GGML_F16_EPR  32
 
 #define GGML_F16x32             __m512h
-#define GGML_F16x32_ZERO        _mm512_setzero_ps()
-#define GGML_F16x32_SET1(x)     _mm512_set1_ps(x)
+#define GGML_F16x32_ZERO        _mm512_setzero_ph()
+#define GGML_F16x32_SET1(x)     _mm512_set1_ph(x)
 
 #define GGML_F16x32_LOAD(x)     _mm512_loadu_ph(x)
 #define GGML_F16x32_STORE(x, y) _mm512_storeu_ph(x, y)
 
-#define GGML_F16x32_FMA(a, b, c) _mm512_fmadd_ps(b, c, a)         
+#define GGML_F16x32_FMA(a, b, c) _mm512_fmadd_ph(b, c, a)         
 #define GGML_F16x32_ADD         _mm512_add_ph
 #define GGML_F16x32_MUL         _mm512_mul_ph
 #define GGML_F16x32_REDUCE(res, x)                                      \
 do {                                                                    \
     for (int i = 1; i < GGML_F32_ARR; i++) {                            \
-        x[0] = _mm512_add_phs(x[0], x[i]);                               \
+        x[0] = _mm512_add_ph(x[0], x[i]);                               \
     }                                                                   \
     res = _mm512_reduce_add_ph(x[0]);                                      \
 } while (0)                             
